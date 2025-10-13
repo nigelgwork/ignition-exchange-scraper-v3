@@ -8,7 +8,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
-import threading
+import subprocess
+import sys
+from pathlib import Path
 from datetime import datetime
 
 from .scraper_engine import ScraperEngine
@@ -96,38 +98,99 @@ async def health_check():
 @app.post("/api/scrape/start")
 async def start_scrape(request: ScrapeRequest):
     """Start a new scraping job"""
-    if not scraper_engine:
-        raise HTTPException(status_code=503, detail="Scraper engine not initialized")
+    if not db_manager:
+        raise HTTPException(status_code=503, detail="Database not initialized")
 
-    if scraper_engine.is_running():
+    if scraper_engine and scraper_engine.is_running():
         raise HTTPException(status_code=409, detail="Scrape already in progress")
 
-    # Start scrape in dedicated thread (not FastAPI background task)
-    # This prevents conflicts with Playwright's sync_playwright()
-    thread = threading.Thread(
-        target=scraper_engine.scrape_all,
-        args=(request.triggered_by,),
-        daemon=True
-    )
-    thread.start()
+    # Create job record first
+    job_id = db_manager.create_job(triggered_by=request.triggered_by)
 
-    logger.info(f"Scrape started (triggered by: {request.triggered_by})")
+    # Get path to CLI script
+    cli_path = Path(__file__).parent.parent / "cli.py"
+    python_exe = sys.executable
 
-    return {
-        "success": True,
-        "message": "Scrape started",
-        "triggered_by": request.triggered_by
-    }
+    # Start scraper as subprocess (resolves Playwright + FastAPI incompatibility)
+    cmd = [
+        python_exe,
+        str(cli_path),
+        "--job-id", str(job_id),
+        "--triggered-by", request.triggered_by,
+        "--headless"
+    ]
+
+    try:
+        # Start process in background
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True
+        )
+
+        logger.info(f"Scrape started via subprocess (job #{job_id}, triggered by: {request.triggered_by})")
+
+        return {
+            "success": True,
+            "message": "Scrape started",
+            "job_id": job_id,
+            "triggered_by": request.triggered_by
+        }
+    except Exception as e:
+        logger.error(f"Failed to start scraper subprocess: {e}")
+        db_manager.fail_job(job_id, error_message=f"Failed to start: {str(e)}", elapsed_seconds=0)
+        raise HTTPException(status_code=500, detail=f"Failed to start scraper: {str(e)}")
 
 @app.get("/api/scrape/status")
 async def get_scrape_status() -> ScrapeStatus:
     """Get current scraping status"""
-    if not scraper_engine:
-        raise HTTPException(status_code=503, detail="Scraper engine not initialized")
+    if not db_manager:
+        raise HTTPException(status_code=503, detail="Database not initialized")
 
-    status_data = scraper_engine.get_status()
+    # Get status from database (works with subprocess scraper)
+    try:
+        with db_manager.conn.cursor() as cur:
+            # Query most recent running/paused job
+            cur.execute("""
+                SELECT id, job_start_time, status, resources_found,
+                       EXTRACT(EPOCH FROM (NOW() - job_start_time))::integer as elapsed_seconds
+                FROM scrape_jobs
+                WHERE status IN ('running', 'paused')
+                ORDER BY job_start_time DESC
+                LIMIT 1
+            """)
+            result = cur.fetchone()
 
-    return ScrapeStatus(**status_data)
+            if result:
+                job_id, start_time, status, resources_found, elapsed_seconds = result
+
+                # For progress, we can't track detailed progress from subprocess
+                # but we can show resources found so far
+                return ScrapeStatus(
+                    status=status,
+                    job_id=job_id,
+                    progress={
+                        "current": resources_found if resources_found else 0,
+                        "total": 0,  # Unknown until scrape completes
+                        "current_item": "",
+                        "percentage": 0
+                    },
+                    elapsed_seconds=int(elapsed_seconds) if elapsed_seconds else 0,
+                    estimated_remaining_seconds=None
+                )
+            else:
+                # No active job
+                return ScrapeStatus(
+                    status="idle",
+                    job_id=None,
+                    progress={"current": 0, "total": 0, "current_item": "", "percentage": 0},
+                    elapsed_seconds=0,
+                    estimated_remaining_seconds=None
+                )
+    except Exception as e:
+        logger.error(f"Error fetching scrape status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/scrape/control")
 async def control_scrape(control: ControlAction):

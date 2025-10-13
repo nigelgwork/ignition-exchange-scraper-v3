@@ -427,8 +427,9 @@ class ScraperEngine:
         self.is_paused = False
         self.start_time = datetime.now(ADELAIDE_TZ)
 
-        # Create job record
-        self.current_job_id = self.db_manager.create_job(triggered_by=triggered_by)
+        # Create job record if not already set (for CLI mode, it's pre-created)
+        if self.current_job_id is None:
+            self.current_job_id = self.db_manager.create_job(triggered_by=triggered_by)
         self.log(f"Starting scrape job #{self.current_job_id}")
 
         results = []
