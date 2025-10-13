@@ -1,0 +1,83 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: exchange-scraper-postgres
+    environment:
+      POSTGRES_DB: exchange_scraper
+      POSTGRES_USER: ignition
+      POSTGRES_PASSWORD: ignition
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ../sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ignition -d exchange_scraper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - exchange-scraper-net
+
+  ignition:
+    image: inductiveautomation/ignition:8.3-beta
+    container_name: exchange-scraper-ignition
+    ports:
+      - "8088:8088"
+      - "8043:8043"
+    environment:
+      GATEWAY_ADMIN_USERNAME: admin
+      GATEWAY_ADMIN_PASSWORD: password
+      ACCEPT_IGNITION_EULA: "Y"
+      IGNITION_EDITION: standard
+      TZ: Australia/Adelaide
+    volumes:
+      - ignition-data:/usr/local/bin/ignition/data
+      - ../ignition-project:/restore:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/StatusPing"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - exchange-scraper-net
+
+  # Optional: Scraper service (for hybrid approach if native fails)
+  scraper-service:
+    build:
+      context: ../scraper-service
+      dockerfile: Dockerfile
+    container_name: exchange-scraper-service
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://ignition:ignition@postgres:5432/exchange_scraper
+      LOG_LEVEL: INFO
+    volumes:
+      - scraper-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - hybrid  # Only start when using: docker compose --profile hybrid up
+    networks:
+      - exchange-scraper-net
+
+volumes:
+  postgres-data:
+    driver: local
+  ignition-data:
+    driver: local
+  scraper-data:
+    driver: local
+
+networks:
+  exchange-scraper-net:
+    driver: bridge
