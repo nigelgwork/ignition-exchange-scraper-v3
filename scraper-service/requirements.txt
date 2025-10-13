@@ -1,8 +1,10 @@
-# Scraper Service Requirements (for hybrid approach)
+# Scraper Service Requirements
 
 # Web framework
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
 
 # Scraping
 playwright==1.41.0
@@ -11,8 +13,6 @@ lxml==5.1.0
 
 # Database
 psycopg2-binary==2.9.9
-sqlalchemy==2.0.25
 
 # Utilities
 python-dateutil==2.8.2
-pydantic==2.5.3
