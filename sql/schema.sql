@@ -130,7 +130,7 @@ SELECT
     rh.scraped_at AS "Scraped At"
 FROM resource_history rh
 INNER JOIN (
-    SELECT MAX(job_id) as latest_job_id
+    SELECT MAX(id) as latest_job_id
     FROM scrape_jobs
     WHERE status = 'completed'
 ) latest ON rh.job_id = latest.latest_job_id
@@ -151,7 +151,7 @@ SELECT
     rh.scraped_at AS "Scraped At"
 FROM resource_history rh
 INNER JOIN (
-    SELECT job_id
+    SELECT id as job_id
     FROM scrape_jobs
     WHERE status = 'completed'
     ORDER BY job_end_time DESC

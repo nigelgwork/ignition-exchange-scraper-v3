@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ignition
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - ../sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - postgres-data:/var/lib/postgresql/data
@@ -23,7 +23,7 @@ services:
       - exchange-scraper-net
 
   ignition:
-    image: inductiveautomation/ignition:8.3-beta
+    image: inductiveautomation/ignition:latest
     container_name: exchange-scraper-ignition
     ports:
       - "8088:8088"
@@ -62,6 +62,7 @@ services:
       LOG_LEVEL: INFO
     volumes:
       - scraper-data:/data
+    shm_size: '2gb'  # Increase shared memory for Chromium browser
     depends_on:
       postgres:
         condition: service_healthy

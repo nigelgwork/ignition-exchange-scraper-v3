@@ -439,8 +439,13 @@ class ScraperEngine:
                     headless=self.headless,
                     args=[
                         "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",  # WSL2: Use /tmp instead of /dev/shm
+                        "--disable-gpu",  # WSL2: Disable GPU acceleration
+                        "--disable-software-rasterizer",  # WSL2: Disable software rendering
                         "--disable-blink-features=AutomationControlled",
                     ],
+                    timeout=60000  # 60 second timeout for browser launch
                 )
                 context = browser.new_context(
                     user_agent=USER_AGENT,

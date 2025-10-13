@@ -3,11 +3,12 @@ FastAPI application for Exchange scraper service
 Provides REST API for Ignition gateway to trigger and monitor scraping
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
+import threading
 from datetime import datetime
 
 from .scraper_engine import ScraperEngine
@@ -93,7 +94,7 @@ async def health_check():
 
 # Scraper control endpoints
 @app.post("/api/scrape/start")
-async def start_scrape(request: ScrapeRequest, background_tasks: BackgroundTasks):
+async def start_scrape(request: ScrapeRequest):
     """Start a new scraping job"""
     if not scraper_engine:
         raise HTTPException(status_code=503, detail="Scraper engine not initialized")
@@ -101,11 +102,14 @@ async def start_scrape(request: ScrapeRequest, background_tasks: BackgroundTasks
     if scraper_engine.is_running():
         raise HTTPException(status_code=409, detail="Scrape already in progress")
 
-    # Start scrape in background
-    background_tasks.add_task(
-        scraper_engine.scrape_all,
-        triggered_by=request.triggered_by
+    # Start scrape in dedicated thread (not FastAPI background task)
+    # This prevents conflicts with Playwright's sync_playwright()
+    thread = threading.Thread(
+        target=scraper_engine.scrape_all,
+        args=(request.triggered_by,),
+        daemon=True
     )
+    thread.start()
 
     logger.info(f"Scrape started (triggered by: {request.triggered_by})")
 
