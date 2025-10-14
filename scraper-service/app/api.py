@@ -3,24 +3,24 @@ FastAPI application for Exchange scraper service
 Provides REST API for Ignition gateway to trigger and monitor scraping
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
 import logging
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
 
-from .scraper_engine import ScraperEngine
-from .database import DatabaseManager
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
 from .config import get_settings
+from .database import DatabaseManager
+from .scraper_engine import ScraperEngine
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Ignition Exchange Scraper Service",
     description="Web scraping service for the Ignition Exchange platform",
-    version="3.0.0"
+    version="3.0.0",
 )
 
 # Global state
 scraper_engine: Optional[ScraperEngine] = None
 db_manager: Optional[DatabaseManager] = None
 
+
 # Pydantic models
 class ScrapeRequest(BaseModel):
     triggered_by: str = "api"
+
 
 class ScrapeStatus(BaseModel):
     status: str
@@ -46,8 +48,10 @@ class ScrapeStatus(BaseModel):
     elapsed_seconds: Optional[int] = None
     estimated_remaining_seconds: Optional[int] = None
 
+
 class ControlAction(BaseModel):
     action: str  # 'pause', 'resume', 'stop'
+
 
 # Startup/shutdown events
 @app.on_event("startup")
@@ -62,12 +66,10 @@ async def startup_event():
     db_manager = DatabaseManager(settings.database_url)
 
     # Initialize scraper engine
-    scraper_engine = ScraperEngine(
-        db_manager=db_manager,
-        headless=True
-    )
+    scraper_engine = ScraperEngine(db_manager=db_manager, headless=True)
 
     logger.info("Service started successfully")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -84,6 +86,7 @@ async def shutdown_event():
 
     logger.info("Service shutdown complete")
 
+
 # Health check
 @app.get("/health")
 async def health_check():
@@ -91,8 +94,9 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "3.0.0"
+        "version": "3.0.0",
     }
+
 
 # Scraper control endpoints
 @app.post("/api/scrape/start")
@@ -115,32 +119,38 @@ async def start_scrape(request: ScrapeRequest):
     cmd = [
         python_exe,
         str(cli_path),
-        "--job-id", str(job_id),
-        "--triggered-by", request.triggered_by,
-        "--headless"
+        "--job-id",
+        str(job_id),
+        "--triggered-by",
+        request.triggered_by,
+        "--headless",
     ]
 
     try:
         # Start process in background
         subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
         )
 
-        logger.info(f"Scrape started via subprocess (job #{job_id}, triggered by: {request.triggered_by})")
+        logger.info(
+            f"Scrape started via subprocess (job #{job_id}, triggered by: {request.triggered_by})"
+        )
 
         return {
             "success": True,
             "message": "Scrape started",
             "job_id": job_id,
-            "triggered_by": request.triggered_by
+            "triggered_by": request.triggered_by,
         }
     except Exception as e:
         logger.error(f"Failed to start scraper subprocess: {e}")
-        db_manager.fail_job(job_id, error_message=f"Failed to start: {str(e)}", elapsed_seconds=0)
-        raise HTTPException(status_code=500, detail=f"Failed to start scraper: {str(e)}")
+        db_manager.fail_job(
+            job_id, error_message=f"Failed to start: {str(e)}", elapsed_seconds=0
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start scraper: {str(e)}"
+        )
+
 
 @app.get("/api/scrape/status")
 async def get_scrape_status() -> ScrapeStatus:
@@ -152,14 +162,16 @@ async def get_scrape_status() -> ScrapeStatus:
     try:
         with db_manager.conn.cursor() as cur:
             # Query most recent running/paused job
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT id, job_start_time, status, resources_found,
                        EXTRACT(EPOCH FROM (NOW() - job_start_time))::integer as elapsed_seconds
                 FROM scrape_jobs
                 WHERE status IN ('running', 'paused')
                 ORDER BY job_start_time DESC
                 LIMIT 1
-            """)
+            """
+            )
             result = cur.fetchone()
 
             if result:
@@ -174,23 +186,29 @@ async def get_scrape_status() -> ScrapeStatus:
                         "current": resources_found if resources_found else 0,
                         "total": 0,  # Unknown until scrape completes
                         "current_item": "",
-                        "percentage": 0
+                        "percentage": 0,
                     },
                     elapsed_seconds=int(elapsed_seconds) if elapsed_seconds else 0,
-                    estimated_remaining_seconds=None
+                    estimated_remaining_seconds=None,
                 )
             else:
                 # No active job
                 return ScrapeStatus(
                     status="idle",
                     job_id=None,
-                    progress={"current": 0, "total": 0, "current_item": "", "percentage": 0},
+                    progress={
+                        "current": 0,
+                        "total": 0,
+                        "current_item": "",
+                        "percentage": 0,
+                    },
                     elapsed_seconds=0,
-                    estimated_remaining_seconds=None
+                    estimated_remaining_seconds=None,
                 )
     except Exception as e:
         logger.error(f"Error fetching scrape status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/scrape/control")
 async def control_scrape(control: ControlAction):
@@ -212,6 +230,7 @@ async def control_scrape(control: ControlAction):
     else:
         raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
 
+
 # Data retrieval endpoints
 @app.get("/api/results/latest")
 async def get_latest_results(limit: Optional[int] = None):
@@ -221,14 +240,11 @@ async def get_latest_results(limit: Optional[int] = None):
 
     try:
         results = db_manager.get_latest_results(limit=limit)
-        return {
-            "success": True,
-            "count": len(results),
-            "results": results
-        }
+        return {"success": True, "count": len(results), "results": results}
     except Exception as e:
         logger.error(f"Error fetching latest results: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/results/changes")
 async def get_latest_changes():
@@ -238,14 +254,11 @@ async def get_latest_changes():
 
     try:
         changes = db_manager.get_latest_changes()
-        return {
-            "success": True,
-            "count": len(changes),
-            "changes": changes
-        }
+        return {"success": True, "count": len(changes), "changes": changes}
     except Exception as e:
         logger.error(f"Error fetching changes: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/jobs/recent")
 async def get_recent_jobs(limit: int = 10):
@@ -255,14 +268,11 @@ async def get_recent_jobs(limit: int = 10):
 
     try:
         jobs = db_manager.get_recent_jobs(limit=limit)
-        return {
-            "success": True,
-            "count": len(jobs),
-            "jobs": jobs
-        }
+        return {"success": True, "count": len(jobs), "jobs": jobs}
     except Exception as e:
         logger.error(f"Error fetching job history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/logs/recent")
 async def get_recent_logs(limit: int = 50):
@@ -272,14 +282,11 @@ async def get_recent_logs(limit: int = 50):
 
     try:
         logs = db_manager.get_recent_logs(limit=limit)
-        return {
-            "success": True,
-            "count": len(logs),
-            "logs": logs
-        }
+        return {"success": True, "count": len(logs), "logs": logs}
     except Exception as e:
         logger.error(f"Error fetching logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/logs/clear")
 async def clear_logs():
@@ -289,13 +296,11 @@ async def clear_logs():
 
     try:
         deleted_count = db_manager.clear_old_logs()
-        return {
-            "success": True,
-            "message": f"Cleared {deleted_count} old log entries"
-        }
+        return {"success": True, "message": f"Cleared {deleted_count} old log entries"}
     except Exception as e:
         logger.error(f"Error clearing logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/stats")
 async def get_statistics():
@@ -305,13 +310,11 @@ async def get_statistics():
 
     try:
         stats = db_manager.get_statistics()
-        return {
-            "success": True,
-            "statistics": stats
-        }
+        return {"success": True, "statistics": stats}
     except Exception as e:
         logger.error(f"Error fetching statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # Error handlers
 @app.exception_handler(Exception)
@@ -323,9 +326,10 @@ async def global_exception_handler(request, exc):
         content={
             "success": False,
             "error": "Internal server error",
-            "detail": str(exc)
-        }
+            "detail": str(exc),
+        },
     )
+
 
 # Run the application
 if __name__ == "__main__":
@@ -338,5 +342,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         reload=settings.debug,
-        log_level="info"
+        log_level="info",
     )

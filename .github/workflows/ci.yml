@@ -1,0 +1,147 @@
+name: Code Quality & Security
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+
+jobs:
+  code-quality:
+    name: Code Quality & Security Checks
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Full history for better secret detection
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black==24.1.1 isort==5.13.2 flake8==7.0.0 bandit==1.7.6
+        # Install project dependencies for full linting context
+        if [ -f scraper-service/requirements.txt ]; then
+          pip install -r scraper-service/requirements.txt
+        fi
+
+    #
+    # FORMATTING CHECKS
+    #
+    - name: Check code formatting with Black
+      run: |
+        echo "::group::Black Formatting Check"
+        black --check --diff scraper-service/ scripts/ || {
+          echo "::error::Code formatting issues found. Run 'black scraper-service/ scripts/' locally to fix."
+          exit 1
+        }
+        echo "::endgroup::"
+
+    - name: Check import sorting with isort
+      run: |
+        echo "::group::isort Import Sorting Check"
+        isort --check-only --diff scraper-service/ scripts/ || {
+          echo "::error::Import sorting issues found. Run 'isort scraper-service/ scripts/' locally to fix."
+          exit 1
+        }
+        echo "::endgroup::"
+
+    #
+    # LINTING CHECKS
+    #
+    - name: Lint with flake8
+      run: |
+        echo "::group::Flake8 Linting"
+        flake8 scraper-service/ scripts/ --count --show-source --statistics || {
+          echo "::error::Linting errors found. Review the output above and fix the issues."
+          exit 1
+        }
+        echo "::endgroup::"
+      continue-on-error: false  # Fail the build on linting errors
+
+    #
+    # SECURITY CHECKS
+    #
+    - name: Security check with Bandit
+      run: |
+        echo "::group::Bandit Security Scan"
+        bandit -r scraper-service/ scripts/ -f json -o bandit-report.json || {
+          echo "::warning::Security issues detected by Bandit. Review bandit-report.json for details."
+          # Print summary
+          python -m bandit -r scraper-service/ scripts/ --severity-level medium
+        }
+        echo "::endgroup::"
+      continue-on-error: true  # Don't fail build, just warn
+
+    - name: Upload Bandit report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: bandit-security-report
+        path: bandit-report.json
+        retention-days: 30
+
+    - name: Secret detection with TruffleHog
+      uses: trufflesecurity/trufflehog@main
+      with:
+        extra_args: --only-verified
+        path: ./
+      continue-on-error: true  # Don't fail build on false positives
+
+    - name: Check for common security issues
+      run: |
+        echo "::group::Additional Security Checks"
+
+        # Check for hardcoded IPs
+        echo "Checking for hardcoded IP addresses..."
+        if grep -r --include="*.py" -E '([0-9]{1,3}\.){3}[0-9]{1,3}' scraper-service/ scripts/ | grep -v '127.0.0.1\|0.0.0.0\|localhost'; then
+          echo "::warning::Found hardcoded IP addresses. Consider using configuration."
+        fi
+
+        # Check for TODO/FIXME/HACK comments that might indicate security issues
+        echo "Checking for security-related TODO comments..."
+        if grep -r --include="*.py" -i "TODO.*security\|FIXME.*security\|HACK.*security" scraper-service/ scripts/; then
+          echo "::warning::Found security-related TODO comments. Review and address them."
+        fi
+
+        # Check for print statements that might leak sensitive data
+        echo "Checking for print statements (potential info leaks)..."
+        if grep -r --include="*.py" "print(" scraper-service/ scripts/ | grep -v "#"; then
+          echo "::warning::Found print() statements. Ensure they don't leak sensitive information."
+        fi
+
+        echo "::endgroup::"
+      continue-on-error: true
+
+    #
+    # DEPENDENCY CHECKS
+    #
+    - name: Check for dependency vulnerabilities
+      run: |
+        echo "::group::Dependency Security Audit"
+        pip install safety
+        safety check --json || {
+          echo "::warning::Dependency vulnerabilities detected. Review and update packages."
+          exit 0  # Don't fail build
+        }
+        echo "::endgroup::"
+      continue-on-error: true
+
+    #
+    # SUMMARY
+    #
+    - name: Quality check summary
+      if: always()
+      run: |
+        echo "::notice::Code quality and security checks complete!"
+        echo "::notice::- Formatting: Black & isort"
+        echo "::notice::- Linting: Flake8"
+        echo "::notice::- Security: Bandit, TruffleHog, Safety"
+        echo "::notice::Review any warnings above and address them as needed."

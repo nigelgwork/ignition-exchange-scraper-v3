@@ -4,14 +4,15 @@ Handles all web scraping using Playwright + BeautifulSoup
 """
 
 import json
+import logging
 import re
 import time
 from datetime import datetime
+from typing import Dict
 from zoneinfo import ZoneInfo
-from typing import Optional, Dict, List, Callable
+
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
-import logging
 
 from .config import get_settings
 
@@ -48,7 +49,7 @@ class ScraperEngine:
             "current": 0,
             "total": 0,
             "current_item": "",
-            "percentage": 0
+            "percentage": 0,
         }
 
     def is_running(self) -> bool:
@@ -75,7 +76,7 @@ class ScraperEngine:
             "current": current,
             "total": total,
             "current_item": current_item,
-            "percentage": percentage
+            "percentage": percentage,
         }
 
     def get_status(self) -> Dict:
@@ -91,12 +92,19 @@ class ScraperEngine:
         estimated_remaining = 0
 
         if self.start_time:
-            elapsed_seconds = int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds())
+            elapsed_seconds = int(
+                (datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds()
+            )
 
             # Estimate remaining time
-            if self.current_progress["total"] > 0 and self.current_progress["current"] > 0:
+            if (
+                self.current_progress["total"] > 0
+                and self.current_progress["current"] > 0
+            ):
                 avg_time_per_item = elapsed_seconds / self.current_progress["current"]
-                remaining_items = self.current_progress["total"] - self.current_progress["current"]
+                remaining_items = (
+                    self.current_progress["total"] - self.current_progress["current"]
+                )
                 estimated_remaining = int(avg_time_per_item * remaining_items)
 
         return {
@@ -104,7 +112,7 @@ class ScraperEngine:
             "job_id": self.current_job_id,
             "progress": self.current_progress,
             "elapsed_seconds": elapsed_seconds,
-            "estimated_remaining_seconds": estimated_remaining
+            "estimated_remaining_seconds": estimated_remaining,
         }
 
     def stop(self):
@@ -137,22 +145,22 @@ class ScraperEngine:
 
         # Handle different version number patterns
         if len(version_num) == 9:  # e.g., 100030000 -> 1.3.0
-            major_str = version_num[1:3].lstrip('0') or '1'
+            major_str = version_num[1:3].lstrip("0") or "1"
             major = int(major_str)
             minor = int(version_num[3:5])
             patch = int(version_num[5:8])
             major = max(1, major)
             return f"{major}.{minor}.{patch}"
         elif len(version_num) == 8:  # e.g., 10003000 -> 1.0.3
-            major_str = version_num[0:1] if version_num[0] != '0' else version_num[1:2]
+            major_str = version_num[0:1] if version_num[0] != "0" else version_num[1:2]
             major = max(1, int(major_str))
             minor = int(version_num[2:4])
             patch = int(version_num[4:7])
             return f"{major}.{minor}.{patch}"
         elif len(version_num) >= 6:
             try:
-                if version_num.startswith('100'):
-                    major = int(version_num[1:3].lstrip('0') or '1')
+                if version_num.startswith("100"):
+                    major = int(version_num[1:3].lstrip("0") or "1")
                     minor = int(version_num[3:5]) if len(version_num) > 4 else 0
                     patch = int(version_num[5:8]) if len(version_num) > 6 else 0
                 else:
@@ -191,9 +199,22 @@ class ScraperEngine:
         keys_title = ["title", "name", "resource_title"]
         keys_dev = ["author", "developer", "owner", "contributor", "created_by", "user"]
         keys_ver = ["version", "latest", "latest_release", "release"]
-        keys_updated = ["updated", "modified", "last_updated", "updated_at", "modified_at"]
+        keys_updated = [
+            "updated",
+            "modified",
+            "last_updated",
+            "updated_at",
+            "modified_at",
+        ]
         keys_tagline = ["tagline", "summary", "brief", "subtitle", "short_description"]
-        keys_contributor = ["contributor", "contributor_name", "author_name", "developer_name", "username", "display_name"]
+        keys_contributor = [
+            "contributor",
+            "contributor_name",
+            "author_name",
+            "developer_name",
+            "username",
+            "display_name",
+        ]
 
         title = developer_id = version = updated_date = tagline = contributor = None
 
@@ -233,7 +254,14 @@ class ScraperEngine:
                         contributor = val.strip()
                         break
 
-            if title and developer_id and version and updated_date and tagline and contributor:
+            if (
+                title
+                and developer_id
+                and version
+                and updated_date
+                and tagline
+                and contributor
+            ):
                 break
 
         return title, developer_id, version, updated_date, tagline, contributor
@@ -250,7 +278,12 @@ class ScraperEngine:
                 ct = resp.headers.get("content-type", "")
                 url = resp.url
                 if "application/json" in ct.lower():
-                    if "exchange" in url.lower() or "resource" in url.lower() or "/api/" in url.lower() or "/resources" in url.lower():
+                    if (
+                        "exchange" in url.lower()
+                        or "resource" in url.lower()
+                        or "/api/" in url.lower()
+                        or "/resources" in url.lower()
+                    ):
                         try:
                             j = resp.json()
                             json_matches.append({"url": url, "json": j})
@@ -285,8 +318,12 @@ class ScraperEngine:
 
         # Title candidates
         title_candidates = [
-            "h1.exchange-resource__title", "h1.page-title", "h1.resource-title", "h1",
-            ".resource-header h1", ".exchange-header h1"
+            "h1.exchange-resource__title",
+            "h1.page-title",
+            "h1.resource-title",
+            "h1",
+            ".resource-header h1",
+            ".exchange-header h1",
         ]
         for sel in title_candidates:
             el = soup.select_one(sel)
@@ -296,14 +333,18 @@ class ScraperEngine:
 
         # Developer ID
         dev_candidates = [
-            "a.exchange-resource__author", "div.exchange-resource__author a",
-            ".resource-author a", ".byline a", ".author a", ".resource-author"
+            "a.exchange-resource__author",
+            "div.exchange-resource__author a",
+            ".resource-author a",
+            ".byline a",
+            ".author a",
+            ".resource-author",
         ]
         for sel in dev_candidates:
             el = soup.select_one(sel)
             if el:
-                href = el.get('href', '')
-                id_match = re.search(r'/user/(\d+)', href)
+                href = el.get("href", "")
+                id_match = re.search(r"/user/(\d+)", href)
                 if id_match:
                     developer_id = id_match.group(1)
                     break
@@ -314,8 +355,11 @@ class ScraperEngine:
 
         # Version
         ver_candidates = [
-            "div.exchange-release__version", ".resource-version", ".version",
-            ".latest-release", ".release-version"
+            "div.exchange-release__version",
+            ".resource-version",
+            ".version",
+            ".latest-release",
+            ".release-version",
         ]
         for sel in ver_candidates:
             el = soup.select_one(sel)
@@ -325,13 +369,17 @@ class ScraperEngine:
 
         # Updated date
         date_candidates = [
-            ".exchange-resource__updated", ".resource-updated", ".last-updated",
-            ".updated-date", "time[datetime]", ".release-date"
+            ".exchange-resource__updated",
+            ".resource-updated",
+            ".last-updated",
+            ".updated-date",
+            "time[datetime]",
+            ".release-date",
         ]
         for sel in date_candidates:
             el = soup.select_one(sel)
             if el:
-                datetime_attr = el.get('datetime')
+                datetime_attr = el.get("datetime")
                 if datetime_attr:
                     updated_date = datetime_attr
                     break
@@ -342,14 +390,19 @@ class ScraperEngine:
 
         # Tagline
         tagline_candidates = [
-            ".exchange-resource__tagline", ".resource-tagline", ".resource-summary",
-            ".tagline", ".summary", ".description", "meta[name='description']"
+            ".exchange-resource__tagline",
+            ".resource-tagline",
+            ".resource-summary",
+            ".tagline",
+            ".summary",
+            ".description",
+            "meta[name='description']",
         ]
         for sel in tagline_candidates:
             if sel.startswith("meta"):
                 el = soup.select_one(sel)
                 if el:
-                    content = el.get('content', '').strip()
+                    content = el.get("content", "").strip()
                     if content:
                         tagline = content
                         break
@@ -361,9 +414,14 @@ class ScraperEngine:
 
         # Contributor name
         contributor_candidates = [
-            "a.exchange-resource__author", "div.exchange-resource__author a",
-            ".resource-author a", ".byline a", ".author a", ".resource-author",
-            ".contributor-name", ".author-name"
+            "a.exchange-resource__author",
+            "div.exchange-resource__author a",
+            ".resource-author a",
+            ".byline a",
+            ".author a",
+            ".resource-author",
+            ".contributor-name",
+            ".author-name",
         ]
         for sel in contributor_candidates:
             el = soup.select_one(sel)
@@ -374,8 +432,17 @@ class ScraperEngine:
                     break
 
         # Try JSON fallback
-        if (not title) or (not developer_id) or (not version) or (not updated_date) or (not tagline) or (not contributor):
-            j_title, j_dev_id, j_ver, j_updated, j_tagline, j_contributor = self.extract_from_json_matches(json_matches)
+        if (
+            (not title)
+            or (not developer_id)
+            or (not version)
+            or (not updated_date)
+            or (not tagline)
+            or (not contributor)
+        ):
+            j_title, j_dev_id, j_ver, j_updated, j_tagline, j_contributor = (
+                self.extract_from_json_matches(json_matches)
+            )
             title = title or j_title
             developer_id = developer_id or j_dev_id
             version = version or j_ver
@@ -398,7 +465,7 @@ class ScraperEngine:
 
         # Extract resource ID from URL
         resource_id = None
-        match = re.search(r'/exchange/(\d+)/', resource_url)
+        match = re.search(r"/exchange/(\d+)/", resource_url)
         if match:
             resource_id = int(match.group(1))
 
@@ -410,7 +477,7 @@ class ScraperEngine:
             "version": version,
             "updated_date": updated_date,
             "tagline": tagline,
-            "contributor": contributor
+            "contributor": contributor,
         }
 
         try:
@@ -446,7 +513,7 @@ class ScraperEngine:
                         "--disable-software-rasterizer",  # WSL2: Disable software rendering
                         "--disable-blink-features=AutomationControlled",
                     ],
-                    timeout=60000  # 60 second timeout for browser launch
+                    timeout=60000,  # 60 second timeout for browser launch
                 )
                 context = browser.new_context(
                     user_agent=USER_AGENT,
@@ -463,11 +530,17 @@ class ScraperEngine:
                 self.log("Checking for modal popups...")
                 try:
                     modal_close_selectors = [
-                        "button:has-text('Accept')", "button:has-text('OK')",
-                        "button:has-text('Continue')", "button:has-text('Close')",
-                        "button:has-text('Dismiss')", ".modal button",
-                        ".ReactModal__Content button", "[data-testid='close-button']",
-                        "[aria-label='Close']", ".close-button", "button[class*='close']"
+                        "button:has-text('Accept')",
+                        "button:has-text('OK')",
+                        "button:has-text('Continue')",
+                        "button:has-text('Close')",
+                        "button:has-text('Dismiss')",
+                        ".modal button",
+                        ".ReactModal__Content button",
+                        "[data-testid='close-button']",
+                        "[aria-label='Close']",
+                        ".close-button",
+                        "button[class*='close']",
                     ]
 
                     for selector in modal_close_selectors:
@@ -492,20 +565,31 @@ class ScraperEngine:
                 consecutive_no_change = 0
                 max_no_change = 3
 
-                while load_more_count < self.settings.load_more_attempts and consecutive_no_change < max_no_change:
+                while (
+                    load_more_count < self.settings.load_more_attempts
+                    and consecutive_no_change < max_no_change
+                ):
                     if self.check_pause_stop():
                         self.log("Scrape stopped by user", "warning")
                         break
 
                     try:
-                        current_links = len(page.query_selector_all("a[href*='/exchange/'][href*='/overview']"))
+                        current_links = len(
+                            page.query_selector_all(
+                                "a[href*='/exchange/'][href*='/overview']"
+                            )
+                        )
 
                         btn = None
                         button_selectors = [
-                            "button:has-text('Load more')", "button:has-text('Load More')",
-                            "button:has-text('Show more')", "button:has-text('Show More')",
-                            "button[class*='load']", "button[class*='more']",
-                            ".load-more", "#load-more"
+                            "button:has-text('Load more')",
+                            "button:has-text('Load More')",
+                            "button:has-text('Show more')",
+                            "button:has-text('Show More')",
+                            "button[class*='load']",
+                            "button[class*='more']",
+                            ".load-more",
+                            "#load-more",
                         ]
 
                         for selector in button_selectors:
@@ -514,7 +598,9 @@ class ScraperEngine:
                                 break
 
                         if btn and btn.is_visible() and btn.is_enabled():
-                            self.log(f"  Clicking Load more... (attempt {load_more_count + 1}, current resources: {current_links})")
+                            self.log(
+                                f"  Clicking Load more... (attempt {load_more_count + 1}, current resources: {current_links})"
+                            )
 
                             btn.scroll_into_view_if_needed()
                             time.sleep(0.5)
@@ -529,24 +615,38 @@ class ScraperEngine:
 
                             time.sleep(3)
 
-                            new_links = len(page.query_selector_all("a[href*='/exchange/'][href*='/overview']"))
+                            new_links = len(
+                                page.query_selector_all(
+                                    "a[href*='/exchange/'][href*='/overview']"
+                                )
+                            )
 
                             if new_links > current_links:
-                                self.log(f"    Loaded {new_links - current_links} new resources (total: {new_links})")
+                                self.log(
+                                    f"    Loaded {new_links - current_links} new resources (total: {new_links})"
+                                )
                                 consecutive_no_change = 0
                             else:
                                 consecutive_no_change += 1
-                                self.log(f"    No new resources loaded (attempt {consecutive_no_change}/{max_no_change})")
+                                self.log(
+                                    f"    No new resources loaded (attempt {consecutive_no_change}/{max_no_change})"
+                                )
 
                             load_more_count += 1
 
                             if new_links > 400:
                                 time.sleep(2)
                         else:
-                            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                            page.evaluate(
+                                "window.scrollTo(0, document.body.scrollHeight)"
+                            )
                             time.sleep(2)
 
-                            after_scroll_links = len(page.query_selector_all("a[href*='/exchange/'][href*='/overview']"))
+                            after_scroll_links = len(
+                                page.query_selector_all(
+                                    "a[href*='/exchange/'][href*='/overview']"
+                                )
+                            )
                             if after_scroll_links > current_links:
                                 consecutive_no_change = 0
                                 continue
@@ -562,7 +662,9 @@ class ScraperEngine:
                             break
                         time.sleep(2)
 
-                total_loaded = len(page.query_selector_all("a[href*='/exchange/'][href*='/overview']"))
+                total_loaded = len(
+                    page.query_selector_all("a[href*='/exchange/'][href*='/overview']")
+                )
                 self.log(f"Finished loading. Total resources found: {total_loaded}")
 
                 # Collect resource links
@@ -587,8 +689,8 @@ class ScraperEngine:
                         resource_data = self.extract_resource_details(context, url)
                         results.append(resource_data)
 
-                        title = resource_data.get('title', 'Unknown')
-                        version = resource_data.get('version', '')
+                        title = resource_data.get("title", "Unknown")
+                        version = resource_data.get("version", "")
                         self.log(f"✓ Scraped: {title} (v{version})")
                         self.update_progress(idx, len(resource_links), title)
 
@@ -608,49 +710,65 @@ class ScraperEngine:
             if results and not self.should_stop:
                 self.log(f"Storing {len(results)} resources in database...")
                 changes_detected = self.db_manager.store_scrape_results(
-                    job_id=self.current_job_id,
-                    results=results
+                    job_id=self.current_job_id, results=results
                 )
 
                 # Complete job
-                elapsed = int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds())
+                elapsed = int(
+                    (datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds()
+                )
                 self.db_manager.complete_job(
                     job_id=self.current_job_id,
                     resources_found=len(results),
                     changes_detected=changes_detected,
-                    elapsed_seconds=elapsed
+                    elapsed_seconds=elapsed,
                 )
 
-                self.log(f"Scrape completed successfully! {len(results)} resources, {changes_detected} changes detected")
+                self.log(
+                    f"Scrape completed successfully! {len(results)} resources, {changes_detected} changes detected"
+                )
             elif self.should_stop:
                 # Mark as stopped
-                elapsed = int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds())
+                elapsed = int(
+                    (datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds()
+                )
                 self.db_manager.fail_job(
                     job_id=self.current_job_id,
                     error_message="Stopped by user",
-                    elapsed_seconds=elapsed
+                    elapsed_seconds=elapsed,
                 )
                 self.log("Scrape stopped by user")
             else:
                 # No results - fail job
-                elapsed = int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds())
+                elapsed = int(
+                    (datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds()
+                )
                 self.db_manager.fail_job(
                     job_id=self.current_job_id,
                     error_message="No resources found",
-                    elapsed_seconds=elapsed
+                    elapsed_seconds=elapsed,
                 )
                 self.log("Scrape failed - no resources found", "error")
 
         except Exception as e:
             self.log(f"FATAL ERROR during scrape: {e}", "error")
-            elapsed = int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds()) if self.start_time else 0
+            elapsed = (
+                int((datetime.now(ADELAIDE_TZ) - self.start_time).total_seconds())
+                if self.start_time
+                else 0
+            )
             self.db_manager.fail_job(
                 job_id=self.current_job_id,
                 error_message=str(e),
-                elapsed_seconds=elapsed
+                elapsed_seconds=elapsed,
             )
         finally:
             self._is_running = False
             self.current_job_id = None
             self.start_time = None
-            self.current_progress = {"current": 0, "total": 0, "current_item": "", "percentage": 0}
+            self.current_progress = {
+                "current": 0,
+                "total": 0,
+                "current_item": "",
+                "percentage": 0,
+            }

@@ -58,8 +58,26 @@ data/*.xlsx
 data/output/
 !data/.gitkeep
 
-# Secrets
+# Secrets and sensitive files
 secrets/
 *.key
 *.pem
+*.crt
+*.p12
+*.pfx
 credentials.json
+.env
+.env.local
+.env.*.local
+config.ini
+config.yaml
+config.yml
+*_secret.py
+*_secrets.py
+
+# Security scan reports
+bandit-report.json
+safety-report.json
+trufflehog-report.json
+.bandit
+.safety

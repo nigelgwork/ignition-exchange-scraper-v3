@@ -1,0 +1,41 @@
+[flake8]
+# Maximum line length (matches black)
+max-line-length = 88
+
+# Ignore specific error codes for black compatibility
+extend-ignore =
+    # E203: whitespace before ':' (conflicts with black)
+    E203,
+    # W503: line break before binary operator (conflicts with black)
+    W503,
+    # E501: line too long (black handles this)
+    E501
+
+# Exclude directories
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    ENV,
+    .eggs,
+    *.egg,
+    build,
+    dist,
+    .tox,
+    ignition-project/gateway-scripts,
+
+# Maximum complexity (cyclomatic complexity)
+max-complexity = 10
+
+# Show source code for each error
+show-source = True
+
+# Show statistics at the end
+statistics = True
+
+# Per-file ignores (if needed)
+per-file-ignores =
+    # Ignore unused imports in __init__.py files
+    __init__.py:F401

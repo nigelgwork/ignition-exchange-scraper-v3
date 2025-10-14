@@ -4,19 +4,29 @@ Standalone CLI for running scraper independently of FastAPI
 This resolves the Playwright + FastAPI incompatibility issue
 """
 
-import sys
 import argparse
-from app.scraper_engine import ScraperEngine
-from app.database import DatabaseManager
+import sys
+
 from app.config import get_settings
+from app.database import DatabaseManager
+from app.scraper_engine import ScraperEngine
 
 
 def main():
     """Run scraper as standalone CLI tool"""
     parser = argparse.ArgumentParser(description="Ignition Exchange Scraper CLI")
-    parser.add_argument('--job-id', type=int, required=True, help='Job ID from database')
-    parser.add_argument('--triggered-by', type=str, default='cli', help='Who triggered this scrape')
-    parser.add_argument('--headless', action='store_true', default=True, help='Run browser in headless mode')
+    parser.add_argument(
+        "--job-id", type=int, required=True, help="Job ID from database"
+    )
+    parser.add_argument(
+        "--triggered-by", type=str, default="cli", help="Who triggered this scrape"
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        default=True,
+        help="Run browser in headless mode",
+    )
 
     args = parser.parse_args()
 
