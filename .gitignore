@@ -29,6 +29,10 @@ pip-delete-this-directory.txt
 # OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
+*.Zone.Identifier
+desktop.ini
+ehthumbs.db
 
 # Logs
 *.log

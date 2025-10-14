@@ -167,6 +167,91 @@ For flake8:
 1. Go to **Settings** > **Tools** > **External Tools**
 2. Add flake8 with appropriate settings
 
+### Repository Cleanup & Organization
+
+**IMPORTANT:** Always keep the repository clean and organized!
+
+#### Cleanup Checklist
+
+Before committing code, always run this cleanup:
+
+```bash
+# 1. Remove Windows metadata files (Zone.Identifier)
+find . -name "*Zone.Identifier*" -type f -delete
+
+# 2. Remove other OS junk files
+find . -name ".DS_Store" -type f -delete
+find . -name "Thumbs.db" -type f -delete
+find . -name "desktop.ini" -type f -delete
+
+# 3. Remove Python cache
+find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null
+find . -name "*.pyc" -delete
+find . -name "*.pyo" -delete
+
+# 4. Clean up temporary files
+find . -name "*.tmp" -delete
+find . -name "*~" -delete
+```
+
+#### File Organization Rules
+
+**Root directory** - Only essential files:
+- `README.md` - Main project readme
+- `QUICK_START.md` - Quick start guide
+- `DEVELOPMENT.md` - This file (developer guide)
+- `CLAUDE.md` - Claude Code instructions
+- Configuration files (`.gitignore`, `pyproject.toml`, `.flake8`)
+
+**Documentation** - Goes in `docs/`:
+- Technical documentation
+- Deployment guides
+- Architecture decisions
+- Project status updates
+- Testing guides
+- Setup instructions
+
+**Code** - Organized by purpose:
+- `scraper-service/` - Main scraper code
+- `scripts/` - Automation and utility scripts
+- `ignition-project/` - Ignition-specific files
+- `sql/` - Database schemas
+- `docker/` - Docker configurations
+- `tests/` - Test files
+
+#### .gitignore Coverage
+
+The `.gitignore` file automatically excludes:
+- Python cache files (`__pycache__`, `*.pyc`)
+- Virtual environments (`venv/`, `.venv/`)
+- OS metadata (`*.Zone.Identifier`, `.DS_Store`, `Thumbs.db`)
+- IDE settings (`.vscode/`, `.idea/`)
+- Secrets and credentials (`*.env`, `*.key`, `*.pem`)
+- Build artifacts (`dist/`, `build/`, `*.egg-info`)
+- Log files (`*.log`, `logs/`)
+
+#### Best Practices
+
+1. **Before every commit:**
+   - Run cleanup commands above
+   - Format code with black and isort
+   - Check for uncommitted files: `git status`
+
+2. **When adding new documentation:**
+   - Place in `docs/` folder
+   - Use clear, descriptive filenames
+   - Update main README.md if needed
+
+3. **When creating new files:**
+   - Put them in appropriate directories
+   - Don't leave files in root unless they're essential
+   - Add to `.gitignore` if they're generated files
+
+4. **Windows users (WSL/native):**
+   - Always remove `Zone.Identifier` files before committing
+   - These are Windows security metadata files
+   - Already excluded in `.gitignore`
+
 ### Questions?
 
 - **CI failing?** Check the workflow run logs in GitHub Actions
