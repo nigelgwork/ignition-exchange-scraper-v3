@@ -23,7 +23,7 @@ services:
       - exchange-scraper-net
 
   ignition:
-    image: inductiveautomation/ignition:latest
+    image: inductiveautomation/ignition:8.3.0-rc1
     container_name: exchange-scraper-ignition
     ports:
       - "8088:8088"

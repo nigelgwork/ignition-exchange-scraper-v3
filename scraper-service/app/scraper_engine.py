@@ -169,7 +169,7 @@ class ScraperEngine:
                     patch = int(version_num[3:6]) if len(version_num) > 4 else 0
                 major = max(1, major)
                 return f"{major}.{minor}.{patch}"
-            except:
+            except (ValueError, IndexError):
                 return version_str
 
         try:
@@ -177,7 +177,7 @@ class ScraperEngine:
                 return "1.0.0"
             elif version_num.isdigit():
                 return str(max(1, int(version_num)))
-        except:
+        except (ValueError, AttributeError):
             pass
 
         return version_str
@@ -551,7 +551,7 @@ class ScraperEngine:
                                 modal_btn.click()
                                 time.sleep(1)
                                 break
-                        except:
+                        except Exception:
                             continue
 
                     page.keyboard.press("Escape")
@@ -607,10 +607,10 @@ class ScraperEngine:
 
                             try:
                                 btn.click(timeout=5000)
-                            except:
+                            except Exception:
                                 try:
                                     btn.click(force=True, timeout=5000)
-                                except:
+                                except Exception:
                                     pass
 
                             time.sleep(3)

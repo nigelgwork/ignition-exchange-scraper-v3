@@ -172,7 +172,7 @@ class DatabaseManager:
                             updated_date = datetime.fromisoformat(
                                 updated_date.replace("Z", "+00:00")
                             )
-                        except:
+                        except (ValueError, TypeError):
                             updated_date = None
 
                     # Check if this is new or updated
