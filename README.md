@@ -1,12 +1,24 @@
 # Ignition Exchange Scraper v3
 
+> **⚠️ PROJECT ARCHIVED**
+>
+> This project has been archived and is no longer maintained. The installation complexity and multi-service architecture made it impractical for deployment to typical Ignition environments.
+>
+> **Reason for archival**: Installation process too complex for end users (requires PostgreSQL, Python 3.11+, Playwright, separate scraper service, and extensive Ignition configuration)
+>
+> **Future direction**: A simpler approach using a Python 3 Ignition module (single import, no external services) may be explored in the future.
+>
+> The code remains available for reference and educational purposes.
+
+---
+
 Automated scraper for tracking and monitoring resources on the Ignition Exchange platform, built as an Ignition 8.3 Perspective project with a microservice backend.
 
 ## 🎯 Project Status
 
 **Version**: 3.0.0
-**Status**: **95% Complete** - Infrastructure ready, Docker browser issue outstanding
-**Last Updated**: 2025-10-13
+**Status**: **ARCHIVED** - Project discontinued due to deployment complexity
+**Last Updated**: 2025-10-15
 
 See [PROJECT_STATUS.md](docs/PROJECT_STATUS.md) for detailed status and next steps.
 
