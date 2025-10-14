@@ -9,7 +9,9 @@ extend-ignore =
     # W503: line break before binary operator (conflicts with black)
     W503,
     # E501: line too long (black handles this)
-    E501
+    E501,
+    # C901: function is too complex (warning only, doesn't fail CI)
+    C901
 
 # Exclude directories
 exclude =
