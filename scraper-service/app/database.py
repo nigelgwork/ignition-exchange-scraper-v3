@@ -135,6 +135,109 @@ class DatabaseManager:
             self.conn.rollback()
             logger.error(f"Error adding log: {e}")
 
+    def _parse_updated_date(self, updated_date):
+        """Parse updated_date string to datetime object"""
+        if updated_date and isinstance(updated_date, str):
+            try:
+                return datetime.fromisoformat(updated_date.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                return None
+        return updated_date
+
+    def _detect_change_type(
+        self, resource: Dict, previous_resources: Dict, updated_date
+    ) -> str:
+        """Detect if resource is new, updated, or unchanged"""
+        resource_id = resource.get("resource_id")
+
+        if resource_id not in previous_resources:
+            return "new"
+
+        prev = previous_resources[resource_id]
+        if (
+            resource.get("version") != prev["version"]
+            or resource.get("title") != prev["title"]
+            or (
+                updated_date
+                and prev["updated_date"]
+                and updated_date != prev["updated_date"]
+            )
+        ):
+            return "updated"
+
+        return "unchanged"
+
+    def _upsert_resource(self, cur, resource: Dict, updated_date):
+        """Insert or update resource in main table"""
+        cur.execute(
+            """
+            INSERT INTO exchange_resources (
+                resource_id, url, title, developer_id, version,
+                updated_date, tagline, contributor, last_scraped_date
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (resource_id) DO UPDATE SET
+                url = EXCLUDED.url,
+                title = EXCLUDED.title,
+                developer_id = EXCLUDED.developer_id,
+                version = EXCLUDED.version,
+                updated_date = EXCLUDED.updated_date,
+                tagline = EXCLUDED.tagline,
+                contributor = EXCLUDED.contributor,
+                last_scraped_date = EXCLUDED.last_scraped_date,
+                is_deleted = FALSE
+        """,
+            (
+                resource.get("resource_id"),
+                resource.get("url"),
+                resource.get("title"),
+                resource.get("developer_id"),
+                resource.get("version"),
+                updated_date,
+                resource.get("tagline"),
+                resource.get("contributor"),
+                datetime.now(ADELAIDE_TZ),
+            ),
+        )
+
+    def _insert_resource_history(
+        self, cur, job_id: int, resource: Dict, updated_date, change_type: str
+    ):
+        """Insert resource into history table"""
+        cur.execute(
+            """
+            INSERT INTO resource_history (
+                resource_id, job_id, url, title, developer_id, version,
+                updated_date, tagline, contributor, scraped_at, change_type
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+            (
+                resource.get("resource_id"),
+                job_id,
+                resource.get("url"),
+                resource.get("title"),
+                resource.get("developer_id"),
+                resource.get("version"),
+                updated_date,
+                resource.get("tagline"),
+                resource.get("contributor"),
+                datetime.now(ADELAIDE_TZ),
+                change_type,
+            ),
+        )
+
+    def _mark_deleted_resources(self, cur, previous_resources: Dict, seen_ids: set):
+        """Mark unseen resources as deleted"""
+        for resource_id in previous_resources.keys():
+            if resource_id not in seen_ids:
+                cur.execute(
+                    """
+                    UPDATE exchange_resources
+                    SET is_deleted = TRUE
+                    WHERE resource_id = %s
+                """,
+                    (resource_id,),
+                )
+
     def store_scrape_results(self, job_id: int, results: List[Dict]) -> int:
         """
         Store scrape results and detect changes
@@ -154,7 +257,6 @@ class DatabaseManager:
                 )
                 previous_resources = {row["resource_id"]: row for row in cur.fetchall()}
 
-                # Track which resources we've seen
                 seen_resource_ids = set()
 
                 for resource in results:
@@ -164,102 +266,23 @@ class DatabaseManager:
 
                     seen_resource_ids.add(resource_id)
 
-                    # Parse updated_date if it's a string
-                    updated_date = resource.get("updated_date")
-                    if updated_date and isinstance(updated_date, str):
-                        try:
-                            # Try to parse ISO format
-                            updated_date = datetime.fromisoformat(
-                                updated_date.replace("Z", "+00:00")
-                            )
-                        except (ValueError, TypeError):
-                            updated_date = None
+                    updated_date = self._parse_updated_date(
+                        resource.get("updated_date")
+                    )
 
-                    # Check if this is new or updated
-                    change_type = "unchanged"
-                    if resource_id not in previous_resources:
-                        change_type = "new"
+                    change_type = self._detect_change_type(
+                        resource, previous_resources, updated_date
+                    )
+
+                    if change_type in ("new", "updated"):
                         changes_detected += 1
-                    else:
-                        # Check for changes
-                        prev = previous_resources[resource_id]
-                        if (
-                            resource.get("version") != prev["version"]
-                            or resource.get("title") != prev["title"]
-                            or (
-                                updated_date
-                                and prev["updated_date"]
-                                and updated_date != prev["updated_date"]
-                            )
-                        ):
-                            change_type = "updated"
-                            changes_detected += 1
 
-                    # Insert or update main resources table
-                    cur.execute(
-                        """
-                        INSERT INTO exchange_resources (
-                            resource_id, url, title, developer_id, version,
-                            updated_date, tagline, contributor, last_scraped_date
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (resource_id) DO UPDATE SET
-                            url = EXCLUDED.url,
-                            title = EXCLUDED.title,
-                            developer_id = EXCLUDED.developer_id,
-                            version = EXCLUDED.version,
-                            updated_date = EXCLUDED.updated_date,
-                            tagline = EXCLUDED.tagline,
-                            contributor = EXCLUDED.contributor,
-                            last_scraped_date = EXCLUDED.last_scraped_date,
-                            is_deleted = FALSE
-                    """,
-                        (
-                            resource_id,
-                            resource.get("url"),
-                            resource.get("title"),
-                            resource.get("developer_id"),
-                            resource.get("version"),
-                            updated_date,
-                            resource.get("tagline"),
-                            resource.get("contributor"),
-                            datetime.now(ADELAIDE_TZ),
-                        ),
+                    self._upsert_resource(cur, resource, updated_date)
+                    self._insert_resource_history(
+                        cur, job_id, resource, updated_date, change_type
                     )
 
-                    # Insert into history table
-                    cur.execute(
-                        """
-                        INSERT INTO resource_history (
-                            resource_id, job_id, url, title, developer_id, version,
-                            updated_date, tagline, contributor, scraped_at, change_type
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                        (
-                            resource_id,
-                            job_id,
-                            resource.get("url"),
-                            resource.get("title"),
-                            resource.get("developer_id"),
-                            resource.get("version"),
-                            updated_date,
-                            resource.get("tagline"),
-                            resource.get("contributor"),
-                            datetime.now(ADELAIDE_TZ),
-                            change_type,
-                        ),
-                    )
-
-                # Mark resources not seen as deleted
-                for resource_id in previous_resources.keys():
-                    if resource_id not in seen_resource_ids:
-                        cur.execute(
-                            """
-                            UPDATE exchange_resources
-                            SET is_deleted = TRUE
-                            WHERE resource_id = %s
-                        """,
-                            (resource_id,),
-                        )
+                self._mark_deleted_resources(cur, previous_resources, seen_resource_ids)
 
                 self.conn.commit()
                 logger.info(
